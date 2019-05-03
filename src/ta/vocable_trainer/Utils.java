@@ -113,6 +113,16 @@ public class Utils {
         }
     }
 
+    static String parsePrefLanguage(int value) throws IllegalArgumentException{
+        if(value == -1)
+            return prefLanguageNative;
+        if(value == 0)
+            return prefLanguageNone;
+        if(value == 1)
+            return prefLanguageForeign;
+        throw new IllegalArgumentException();
+    }
+
     /**
      * Sets the path of the file used to store vocables before the file was changed.
      * @param fileName Absolute path to the old vocable file.

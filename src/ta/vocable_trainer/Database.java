@@ -35,7 +35,7 @@ public class Database {
     /**
      * Loads the settings data from the specified file path. If the settings file does not exist, it is created with
      * default values.If any values are missing, an exception is thrown that specifies the missing settings.
-     * @throws IOException if the settings file is not in a correct format.
+     * @throws IOException if the settings file is not in a correct format or the setting directory cannot be created.
      */
     static void loadSettings() throws IOException {
         File settingsFile = Utils.settingsFilePath.toFile();
@@ -118,6 +118,27 @@ public class Database {
                 throw new IOException(errorMsg);
             }
         }
+    }
+
+    /**
+     * Save the settings into the specified settings file. Overrides old settings.
+     * @throws IOException if a problem occures while writing the file (e.g. missing privileges).
+     */
+    static void saveSettings() throws IOException{
+        File settingsFile = Utils.settingsFilePath.toFile();
+        if(settingsFile.exists() && !settingsFile.delete()){
+            throw new IOException("Cannot delete old settings file to save new one.");
+        }
+        String settingsContent = "standardNumberOfWords=" + Utils.standardNumberOfWords + System.lineSeparator() +
+                "standardLearningMethod=" + Utils.standardLearningMethod + System.lineSeparator() +
+                "vocabFileName=" + Utils.vocabFileName + System.lineSeparator() +
+                "prefKanji=" + Utils.PreferKanji.parse(Utils.prefKanji) + System.lineSeparator() +
+                "prefLanguage=" + Utils.parsePrefLanguage(Utils.prefLanguage) + System.lineSeparator() +
+                "addFileDelimiter=" + Utils.addFileDelimiter + System.lineSeparator() +
+                "addFileStandardOrder=" + Boolean.toString(Utils.addFileStandardOrder) + System.lineSeparator() +
+                "uploadAddress=" + Utils.uploadAddress + System.lineSeparator() +
+                "uploadPort=" + Utils.uploadPort;
+        writeToFile(settingsFile.getAbsolutePath(), settingsContent);
     }
 
     /**
