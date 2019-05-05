@@ -141,6 +141,50 @@ public class Database {
         writeToFile(settingsFile.getAbsolutePath(), settingsContent);
     }
 
+    static void loadVocabulary() throws IOException{
+        if(!Utils.vocabFilePath.toFile().exists()){
+            return;
+        }
+        if(!Utils.vocabFilePath.toFile().exists()){
+            return;
+        }
+        List<String> allVocabs = Files.readAllLines(Utils.vocabFilePath);
+        if(allVocabs.size() > 0 && allVocabs.get(0).equals(Utils.vocabFileIdentifier)){
+            allVocabs = allVocabs.subList(1, allVocabs.size());
+        }
+        else {
+            throw new IOException("Vocabulary file is in the wrong format: Vocab file identifier is missing.");
+        }
+        int learnedCount, correctCount;
+        long creationTime;
+        for(String vocabString : allVocabs){
+            String[] vocableValues = vocabString.split(Utils.delimiter);
+            try {
+                List<String> words = parseListString(vocableValues[0]);
+                List<String> foreignWords = parseListString(vocableValues[1]);
+                learnedCount = Integer.parseInt(vocableValues[2]);
+                correctCount = Integer.parseInt(vocableValues[3]);
+                creationTime = Long.parseLong(vocableValues[4]);
+                Vocable vocable = new Vocable(words, foreignWords, learnedCount, correctCount, creationTime);
+                for(String key : words){
+                    if(!vocabulary.containsKey(key)){
+                        vocabulary.put(key, new LinkedList<>());
+                    }
+                    vocabulary.get(key).add(vocable);
+                }
+                for(String key : foreignWords){
+                    if(!vocabularyReverse.containsKey(key)){
+                        vocabularyReverse.put(key, new LinkedList<>());
+                    }
+                    vocabularyReverse.get(key).add(vocable);
+                }
+            }
+            catch (Exception e){
+                throw new IOException("Vocabulary file is in the wrong format: \"" + vocabString  +"\"");
+            }
+        }
+    }
+
     /**
      * Simple method that writes to a file.
      * @param path absolute path to write to.
@@ -151,5 +195,40 @@ public class Database {
         PrintWriter writer = new PrintWriter(path, "UTF-8");
         writer.println(text);
         writer.close();
+    }
+
+    /**
+     * Parses the string format used in vocabulary files to store the words in a vocable back into a list.
+     * @param listString String in the format [word1,word2,...]
+     * @return List that contains the stored words.
+     */
+    static private List<String> parseListString(String listString){
+        List<String> result = new ArrayList<>();
+        if(listString.length() <=2){
+            return result;
+        }
+        listString = listString.substring(1, listString.length() - 1);
+        String[] array = listString.split(",");
+        for(String s : array){
+            result.add(s);
+        }
+        return result;
+    }
+
+    /**
+     * Build a string that holds the words of a vocable.
+     * @param list List that contains the words of a vocable.
+     * @return String in the form [word1,word2,...]
+     */
+    static private String listToString(List<String> list){
+        StringBuilder builder = new StringBuilder();
+        builder.append("[");
+        for(int i = 0; i < list.size() - 1; i++){
+            builder.append(list.get(i));
+            builder.append(",");
+        }
+        builder.append(list.get(list.size() - 1));
+        builder.append("]");
+        return builder.toString();
     }
 }

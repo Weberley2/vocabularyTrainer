@@ -62,6 +62,23 @@ public class Utils {
     // vocable files.
     static String vocabFileIdentifier = "[Vocabulary Trainer File]";
 
+    // separates information in the vocabulary file
+    static String delimiter = ";";
+
+    /**
+     * Checks if a string kontains kanji symbols.
+     * @param text String to be checked.
+     * @return True if text contains kanji symbols, else false.
+     */
+    static boolean containsKanji(String text){
+        for(char c : text.toCharArray()) {
+            if(Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS){
+                return true;
+            }
+        }
+        return false;
+    }
+
     static boolean parseBoolean(String boolString){
         boolString = boolString.toLowerCase();
         if(boolString.equals("true") || boolString.equals("t"))
