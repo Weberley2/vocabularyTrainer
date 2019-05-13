@@ -122,7 +122,7 @@ public class Database {
 
     /**
      * Save the settings into the specified settings file. Overrides old settings.
-     * @throws IOException if a problem occures while writing the file (e.g. missing privileges).
+     * @throws IOException if a problem occurs while writing the file (e.g. missing privileges).
      */
     static void saveSettings() throws IOException{
         File settingsFile = Utils.settingsFilePath.toFile();
@@ -141,6 +141,12 @@ public class Database {
         writeToFile(settingsFile.getAbsolutePath(), settingsContent);
     }
 
+    /**
+     * Loads the vocabulary from the specified vocabulary file. The data is stored in the 'vocabulary' and
+     * 'vocabularyReverse' static members of the Database class.
+     * @throws IOException If a problems during reading of the file occurs, or if the vocabulary file format is
+     * incorrect.
+     */
     static void loadVocabulary() throws IOException{
         if(!Utils.vocabFilePath.toFile().exists()){
             return;
@@ -182,6 +188,55 @@ public class Database {
             catch (Exception e){
                 throw new IOException("Vocabulary file is in the wrong format: \"" + vocabString  +"\"");
             }
+        }
+    }
+
+    /**
+     * Saves the vocabulary to the specified vocabulary file location. if a server ip ans port are specified,
+     * the vocabulary is also uploaded to the server.
+     * @throws IOException if a problem occurs while writing the file (e.g. missing privileges).
+     */
+    static void saveVocabulary() throws IOException{
+        File backupFileNew = new File(Paths.get(System.getProperty("user.home"), Utils.parentDirectory, Utils.vocabNewBackupName).toString());
+        if(backupFileNew.exists() && !backupFileNew.delete()){
+            throw new IOException("Could not delete backup file (" + backupFileNew.getAbsolutePath() + ").");
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(Utils.vocabFileIdentifier);
+        builder.append(System.lineSeparator());
+        Set<Vocable> vocableSet = new HashSet<>();
+        for(List<Vocable> vocableList : vocabulary.values()){
+            vocableSet.addAll(vocableList);
+        }
+        for(Vocable vocable : vocableSet){
+            builder.append(listToString(vocable.getWords()));
+            builder.append(Utils.delimiter);
+            builder.append(listToString(vocable.getForeignWords()));
+            builder.append(Utils.delimiter);
+            builder.append(vocable.getLearnedCount());
+            builder.append(Utils.delimiter);
+            builder.append(vocable.getCorrectCount());
+            builder.append(Utils.delimiter);
+            builder.append(vocable.getCreationTime());
+            builder.append(System.lineSeparator());
+        }
+        String saveString = builder.toString();
+        saveString = saveString.substring(0, saveString.lastIndexOf(System.lineSeparator()));
+        if(!Utils.uploadAddress.isEmpty() && !Utils.uploadPort.isEmpty() && TrainerInterface.isVocabularyChanged()){
+            FileUploader.uploadVocables(Utils.uploadAddress, Utils.uploadPort, saveString);
+        }
+        writeToFile(backupFileNew.getAbsolutePath(), saveString);
+
+        File backupFileOld = new File(Utils.oldVocabFilePath.toString());
+        if(backupFileOld.exists() && !backupFileOld.renameTo(Paths.get(System.getProperty("user.home"), Utils.parentDirectory, Utils.vocabOldBackupName).toFile())){
+            throw new IOException("Could not backup vocabulary file.");
+        }
+        if(!backupFileNew.exists() || !backupFileNew.renameTo(Utils.oldVocabFilePath.toFile())){
+            throw new IOException("Could not save new vocabulary file.");
+        }
+        backupFileOld = Paths.get(System.getProperty("user.home"), Utils.parentDirectory, Utils.vocabOldBackupName).toFile();
+        if(backupFileOld.exists() && !backupFileOld.delete()){
+            throw new IOException("Could not delete backup file.");
         }
     }
 

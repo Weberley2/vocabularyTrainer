@@ -159,6 +159,14 @@ public class Utils {
     }
 
     /**
+     * Write the specified string to stdout with a leading '>'.
+     * @param string String to print.
+     */
+    static void write(String string){
+        System.out.println("> " + string);
+    }
+
+    /**
      * Implements a way to prefer/avoid vocables that have (even partial) translations in kanji form.
      */
     enum PreferKanji {
