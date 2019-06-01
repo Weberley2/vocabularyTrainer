@@ -16,7 +16,6 @@ public class Database {
     private static HashMap<String, List<Vocable>> vocabulary = new HashMap<>();
     // holds vocables indexed by their foreign words
     private static HashMap<String, List<Vocable>> vocabularyReverse = new HashMap<>();
-    private static Set<Vocable> removedVocabulary = new HashSet<>();
 
     static HashMap<String, List<Vocable>> getVocabulary(){
         return vocabulary;

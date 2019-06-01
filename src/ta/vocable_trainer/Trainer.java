@@ -186,4 +186,367 @@ public class Trainer {
         resultList.sort(Vocable.getAlphabeticComparator());
         return resultList;
     }
+
+    /**
+     * Saves the vocabulary to disk.
+     * @throws IOException if a problem occurs while writing the file (e.g. missing privileges).
+     */
+    void saveVocabulary() throws IOException{
+        Database.setVocabulary(vocabulary);
+        Database.setVocabularyReverse(vocabularyReverse);
+        Database.saveVocabulary();
+    }
+
+    /**
+     * Checks if the vocabulary was changed during the runtime of the program. This is also the case if the vocables
+     * have been queried by the user, since this changes their stats (times asked, times correct, etc.)
+     * @throws IOException if a problem occurs while writing the file (e.g. missing privileges).
+     */
+    void saveVocabularyIfChanged() throws IOException{
+        if(vocabularyChanged){
+            saveVocabulary();
+        }
+    }
+
+    /**
+     * Takes a list of words that may make up a future vocable, and checks if they are pairwise distinct.
+     * @param wordLists List of words.
+     * @return True if the words are pairwise distinct.
+     */
+    private boolean isUnique(Collection<String> ... wordLists){
+        int expectedSize = 0;
+        Set<String> unionSet = new HashSet<>();
+        for(Collection<String> wordList : wordLists){
+            expectedSize += wordList.size();
+            unionSet.addAll(wordList);
+        }
+        return unionSet.size() == expectedSize;
+    }
+
+    /**
+     * Adds a vocable to the vocabulary. Only allows valid vocables to be added. If multiple ways to add the vocable
+     * exist, the user is asked how to add the vocable exactly.
+     * @param words List of native words that make up the potential new vocable.
+     * @param foreignWords List of foreign words that make up the potential new vocable.
+     * @return True if a new vocable is added or an existing vocable is extended.
+     */
+    boolean addVocable(String words, String foreignWords){
+        Set<Vocable> wordVocables = new HashSet<>();
+        Set<Vocable> foreignWordVocables = new HashSet<>();
+        String[] wordSplit = words.split(",");
+        String[] foreignWordSplit = foreignWords.split(",");
+        if(!isUnique(Arrays.asList(wordSplit), Arrays.asList(foreignWordSplit))){
+            Utils.write("All words need to be unique");
+            return false;
+        }
+        for(String word : wordSplit){
+            if(vocabulary.containsKey(word)){
+                wordVocables.addAll(vocabulary.get(word));
+            }
+        }
+        for(String foreignWord : foreignWordSplit){
+            if(vocabularyReverse.containsKey(foreignWord)){
+                foreignWordVocables.addAll(vocabularyReverse.get(foreignWord));
+            }
+        }
+
+        if(!(wordVocables.isEmpty() && foreignWordVocables.isEmpty())){
+            //check if vocable already exists
+            Set<Vocable> crossSection = new HashSet<>(wordVocables);
+            crossSection.retainAll(foreignWordVocables);
+            for(Vocable vocable : crossSection){
+                boolean containsAll = true;
+                for(String word : wordSplit){
+                    if(!vocable.getWords().contains(word)){
+                        containsAll = false;
+                        break;
+                    }
+                }
+                if(!containsAll){
+                    continue;
+                }
+                for(String foreignWord : foreignWordSplit){
+                    if(!vocable.getForeignWords().contains(foreignWord)){
+                        containsAll = false;
+                        break;
+                    }
+                }
+                if(containsAll){
+                    Utils.write("\"" + vocable.toString() + "\" is already in the vocabulary.");
+                    return false;
+                }
+            }
+            //vocable does not already exist
+            //check if an existing vocable should be changed
+            wordVocables.addAll(foreignWordVocables);
+            List<Vocable> allVocableList = new LinkedList<>(wordVocables);
+            String vocableDescriptor = Utils.listToString(Arrays.asList(wordSplit)) + " -> " +
+                    Utils.listToString(Arrays.asList(foreignWordSplit));
+            int index = makeDecision(allVocableList, "Would you like to add \"" + vocableDescriptor + "\" to an existing vocable?", "No");
+            if(index < -1){
+                return false;
+            }
+            if(index >= 0){
+                //change variable
+
+                Vocable changeVocable = allVocableList.get(index);
+
+                Set<String> potentialWords = new HashSet<>(Arrays.asList(wordSplit));
+                potentialWords.addAll(changeVocable.getWords());
+                Set<String> potentialForeignWords = new HashSet<>(Arrays.asList(foreignWordSplit));
+                potentialForeignWords.addAll(changeVocable.getForeignWords());
+                if(!isUnique(potentialWords, potentialForeignWords)){
+                    Utils.write("All words need to be unique");
+                    return false;
+                }
+
+                for(String word : wordSplit){
+                    List<Vocable> vocableList = getVocabularyList(word, vocabulary);
+                    if(!vocableList.contains(changeVocable)){
+                        vocableList.add(changeVocable);
+                    }
+                }
+                for(String foreignWord : foreignWordSplit){
+                    List<Vocable> foreignVocableList = getVocabularyList(foreignWord, vocabularyReverse);
+                    if(!foreignVocableList.contains(changeVocable)){
+                        foreignVocableList.add(changeVocable);
+                    }
+                }
+                boolean successful = changeVocable.addForeignWords(new ArrayList<>(Arrays.asList(foreignWordSplit)));
+                successful = changeVocable.addWords(new ArrayList<>(Arrays.asList(wordSplit))) || successful;
+                if(successful){
+                    vocabularyChanged = true;
+                    Utils.write("Successfully added to \"" + changeVocable.toString() + "\".");
+                }
+                else {
+                    Utils.write("Could not add to \"" + changeVocable.toString() + "\".");
+                }
+                return successful;
+            }
+        }
+        Vocable addVocable = new Vocable(new ArrayList<>(Arrays.asList(wordSplit)), new ArrayList<>(Arrays.asList(foreignWordSplit)));
+        for(String word : wordSplit){
+            List<Vocable> vocableList = getVocabularyList(word, vocabulary);
+            vocableList.add(addVocable);
+        }
+        for(String foreignWord : foreignWordSplit){
+            List<Vocable> vocableList = getVocabularyList(foreignWord, vocabularyReverse);
+            vocableList.add(addVocable);
+        }
+        Utils.write("Added \"" + addVocable.toString() + "\" to the vocabulary.");
+        vocabularyChanged = true;
+        return true;
+    }
+
+    /**
+     * Outputs a question and several answer options (all but the first one consisting of vocables) to the user, then
+     * returns the index of the chosen vocable, '-1' if the default option was chosen or '-2' if the answer could not
+     * be parsed.
+     * @param vocables Vocables to be chosen from.
+     * @param question Question to be asked to the user.
+     * @param defaultOptionName First answer option to be displayed.
+     * @return Integer representing the users answer.
+     */
+    private int makeDecision(List<?> vocables, String question, String defaultOptionName){
+        StringBuilder builder = new StringBuilder();
+        builder.append(question);
+        builder.append(System.lineSeparator());
+        builder.append(">\t");
+        builder.append(defaultOptionName);
+        builder.append(" ()");
+        builder.append(System.lineSeparator());
+        for(int i = 0; i < vocables.size(); i++){
+            builder.append(">\t");
+            builder.append(vocables.get(i).toString());
+            builder.append(" (");
+            builder.append(i);
+            builder.append(")");
+            if(i + 1< vocables.size()){
+                builder.append(System.lineSeparator());
+            }
+        }
+        Utils.writeLastOutput(builder.toString());
+        int input;
+        try {
+            String inputString = Utils.read();
+            if(inputString.isEmpty()){
+                return -1;
+            }
+            input = Integer.valueOf(inputString);
+            if(input < 0 || input >= vocables.size()){
+                throw new NumberFormatException();
+            }
+        }
+        catch (Exception e){
+            Utils.write("Could not parse input.");
+            return -2;
+        }
+        return input;
+    }
+
+    /**
+     * Get a list of all vocables that contain a specific word.
+     * @param word Word to be searched for.
+     * @param source Vocable map to be searched in (e.g. native or foreign vocabulary.)
+     * @return List of vocables containing the word.
+     */
+    private List<Vocable> getVocabularyList(String word, Map<String, List<Vocable>> source){
+        List<Vocable> vocableList = source.get(word);
+        if(vocableList == null){
+            vocableList = new LinkedList<>();
+            source.put(word, vocableList);
+        }
+        return vocableList;
+    }
+
+    /**
+     * Remove a vocable from the vocabulary identified by a word. If the word does not uniquely identify the vocable,
+     * the user is asked to choose from a list of possible matches. The user is then asked if the complete vocable or
+     * only the given word should be removed from the vocabulary.
+     * @param word Word to be removed.
+     * @return True if a vocable has been deleted or reduced.
+     */
+    boolean removeVocable(String word){
+        List<Vocable> toRemove = null;
+        if(vocabulary.containsKey(word)){
+            toRemove = vocabulary.get(word);
+        }
+        else if(vocabularyReverse.containsKey(word)){
+            toRemove = vocabularyReverse.get(word);
+        }
+        if(toRemove == null || toRemove.isEmpty()){
+            Utils.write("\"" + word + "\" is not in the vocabulary.");
+            return false;
+        }
+        int index = 0;
+        if(toRemove.size() > 1){
+            index = makeDecision(toRemove, "Which vocable would you like to remove?", "None");
+            if(index < 0){
+                if(index == -1){
+                    Utils.write("\"" + word + "\" was not removed.");
+                }
+                return false;
+            }
+        }
+        Vocable removeVocable = toRemove.get(index);
+        int decision = -1;
+        if(!(removeVocable.getForeignWords().contains(word) && removeVocable.getForeignWords().size() == 1) &&
+                !(removeVocable.getWords().contains(word) && removeVocable.getWords().size() == 1)){
+            List<String> proxyList = new ArrayList<>();
+            proxyList.add("Remove \"" + word + "\" from the vocable");
+            decision = makeDecision(proxyList, "What would you like to do to \""+ removeVocable.toString() + "\"?",
+                    "Remove the complete vocable");
+        }
+        if(decision == -1){
+            for(String removeWord : removeVocable.getWords()){
+                vocabulary.get(removeWord).remove(removeVocable);
+            }
+            for(String removeForeignWord : removeVocable.getForeignWords()){
+                vocabularyReverse.get(removeForeignWord).remove(removeVocable);
+            }
+            Utils.write("Successfully removed \"" + removeVocable.toString()  +"\".");
+            vocabularyChanged = true;
+            return true;
+        }
+        if(decision == 0){
+            Vocable testVocable = Vocable.copy(removeVocable);
+            if(testVocable.removeWord(word) != -1 && containsVocable(testVocable)){
+                Utils.write("\"" + testVocable.toString() + "\" is already in the vocabulary.");
+                return false;
+            }
+            int result = removeVocable.removeWord(word);
+            if(result == - 1){
+                return false;
+            }
+            if(result == 0){
+                vocabulary.get(word).remove(removeVocable);
+            }
+            else {
+                vocabularyReverse.get(word).remove(removeVocable);
+            }
+            Utils.write("Successfully removed \"" + word  +"\" from \"" + removeVocable.toString() + "\".");
+            vocabularyChanged = true;
+            return true;
+        }
+        return false;
+
+    }
+
+    /**
+     * Change a word contained in a vocable. If the word does not uniquely identify the vocable, the user is asked
+     * to choose from a list of matches. Prevents changes that would lead to an invalid state of the vocabulary (e.g.
+     * vocables with non-unique words, multiple identical vocables, etc.).
+     * @param word Word to be changed
+     * @param newWord Word to be changed into.
+     * @return True if a vocable was successfully changed.
+     */
+    boolean changeVocable(String word, String newWord){
+        Set<Vocable> changeableSet = new HashSet<>();
+        List<Vocable> vocableList = new LinkedList<>();
+        if(vocabulary.containsKey(word)){
+            vocableList.addAll(vocabulary.get(word));
+            changeableSet.addAll(vocabulary.get(word));
+        }
+        else if(vocabularyReverse.containsKey(word)){
+            changeableSet .addAll(vocabularyReverse.get(word));
+        }
+        if(changeableSet.isEmpty()){
+            Utils.write("\"" + word + "\" is not in the vocabulary.");
+            return false;
+        }
+        int index = 0;
+        List<Vocable> changableList = new LinkedList<>(changeableSet);
+        if(changeableSet.size() > 1){
+            index = makeDecision(changableList, "Which vocable would you like to change?", "None");
+            if(index < 0){
+                if(index == -1){
+                    Utils.write("\"" + word + "\" was not changed.");
+                }
+                return false;
+            }
+        }
+
+        Vocable changeVocable = changableList.get(index);
+        boolean changeVocabulary = false;
+        if(vocableList.contains(changeVocable)){
+            changeVocabulary = true;
+        }
+        HashMap<String, List<Vocable>> vocabularyToChange;
+        Vocable proxy = Vocable.copy(changeVocable);
+        boolean changeResult;
+        if(changeVocabulary){
+            vocabularyToChange = vocabulary;
+            changeResult = proxy.changeWord(word, newWord);
+
+        }
+        else {
+            vocabularyToChange = vocabularyReverse;
+            changeResult = proxy.changeForeignWord(word, newWord);
+        }
+        String changedVocableString = proxy.toString();
+        if(!changeResult){
+            Utils.write("\"" + changedVocableString + "\" could not be changed.");
+            return false;
+        }
+        if(containsVocable(proxy)){
+            Utils.write("\"" + changedVocableString + "\" is already in the vocabulary.");
+            return false;
+        }
+        if(changeVocabulary){
+            changeVocable.changeWord(word, newWord);
+        }
+        else {
+            changeVocable.changeForeignWord(word, newWord);
+        }
+        vocabularyToChange.get(word).remove(changeVocable);
+        List<Vocable> newList = vocabularyToChange.get(newWord);
+        if(newList == null){
+            newList = new LinkedList<>();
+            vocabularyToChange.put(newWord, newList);
+        }
+        newList.add(changeVocable);
+        Utils.write("Successfully changed \"" + changeVocable.toString() + "\".");
+        vocabularyChanged = true;
+        return true;
+    }
 }

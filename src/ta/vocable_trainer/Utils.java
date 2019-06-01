@@ -1,7 +1,13 @@
 package ta.vocable_trainer;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Utils {
     static LearningMethod standardLearningMethod = LearningMethod.randomWords;
@@ -62,8 +68,16 @@ public class Utils {
     // vocable files.
     static String vocabFileIdentifier = "[Vocabulary Trainer File]";
 
-    // separates information in the vocabulary file
+    // Separates information in the vocabulary file.
     static String delimiter = ";";
+
+    // Reads user input.
+    private static BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+
+    // All symbols that can be entered by the user. Contains the latin alphabet, numbers 0 to 9, kanji, hiragana,
+    // katakana and some japanese and western punctuation characters.
+    private static final String regex = "[\\u3040-\\u30ff\\u3400-\\u4dbf\\u4e00-\\u9fff\\uf900-\\ufaff\\uff66-\\uff9fa-zA-Z0-9äöüß \\-,;\"０-９()「」\\.]";
+    private static final Pattern allowedInputSymbols = Pattern.compile(regex, Pattern.MULTILINE);
 
     /**
      * Checks if a string kontains kanji symbols.
@@ -77,6 +91,35 @@ public class Utils {
             }
         }
         return false;
+    }
+
+    /**
+     * check for a variety of japanese commas and whitespace and transform it into standard commas and whitespace.
+     * @param input Input to be sanitized.
+     * @return Sanitized input.
+     */
+    private static String correctWhiteSpace(String input){
+        return input.replace("　", " ").trim().replaceAll(" +", " ").replace("、",",")
+                .replace(" ,", ",").replace(", ",",");
+    }
+
+    /**
+     * Takes a generic list and returns a sting of the form 'listElem1, listElem2, ...'.
+     * @param list List to be turned into a string.
+     * @return String representing the list.
+     */
+    static String listToString(List<?> list){
+        if(list == null){
+            return "";
+        }
+        String result = "";
+        for(int i = 0; i + 1 < list.size(); i++){
+            result += list.get(i).toString() + ", ";
+        }
+        if(!list.isEmpty()){
+            result += list.get(list.size() - 1);
+        }
+        return result;
     }
 
     static boolean parseBoolean(String boolString){
@@ -141,6 +184,32 @@ public class Utils {
     }
 
     /**
+     * Read user input, sanitize it and check for illegal characters.
+     * @return Sanitized user input.
+     * @throws IOException If the user input cannot be read from stdin.
+     */
+    static String read() throws IOException{
+        String correctedWhitepace = correctWhiteSpace(br.readLine());
+        Matcher matcher = allowedInputSymbols.matcher(correctedWhitepace);
+        String skipped = correctedWhitepace;
+        while (matcher.find()) {
+            String character = matcher.group(0);
+            skipped = skipped.replaceFirst(Pattern.quote(character), "");
+        }
+        if(skipped.length() > 0){
+            String skippedMessage= "Illegal characters found: ";
+            for (int i = 0; i < skipped.length(); i++) {
+                correctedWhitepace = correctedWhitepace.replaceAll(Pattern.quote(String.valueOf(skipped.charAt(i))), "");
+                skippedMessage += "\"" + skipped.charAt(i) + "\", ";
+            }
+            skippedMessage = skippedMessage.substring(0, skippedMessage.length() - 2);
+            skippedMessage += ". Used: " + correctedWhitepace;
+            write(skippedMessage);
+        }
+        return correctedWhitepace;
+    }
+
+    /**
      * Sets the path of the file used to store vocables before the file was changed.
      * @param fileName Absolute path to the old vocable file.
      */
@@ -164,6 +233,15 @@ public class Utils {
      */
     static void write(String string){
         System.out.println("> " + string);
+    }
+
+    /**
+     * Write the specified string to stdout and start a new line, both with a leading '>'.
+     * @param string String to print.
+     */
+    static void writeLastOutput(String string){
+        System.out.println("> " + string);
+        System.out.print("> ");
     }
 
     /**
